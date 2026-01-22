@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <title>WebXR Debug</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: monospace;
+            background: #000;
+            color: #0f0;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+        
+        #debug {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        
+        .error { color: #f00; }
+        .success { color: #0f0; }
+        .warning { color: #ff0; }
+        
+        button {
+            margin: 10px 0;
+            padding: 15px 30px;
+            font-size: 16px;
+            background: #FFD700;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="debug"></div>
+    <button id="ar-button">START AR</button>
+    <button id="test-button" style="display:block; background:#4CAF50;">Run Diagnostic</button>
+
+    <script>
+        const debug = document.getElementById('debug');
+        const arButton = document.getElementById('ar-button');
+        const testButton = document.getElementById('test-button');
+        
+        function log(msg, type = 'info') {
+            const line = document.createElement('div');
+            line.textContent = new Date().toLocaleTimeString() + ' - ' + msg;
+            if (type === 'error') line.className = 'error';
+            if (type === 'success') line.className = 'success';
+            if (type === 'warning') line.className = 'warning';
+            debug.appendChild(line);
+            console.log(msg);
+            debug.scrollTop = debug.scrollHeight;
+        }
+
+        log('=== WebXR Diagnostic Started ===');
+        log('Timestamp: ' + new Date().toISOString());
+        log('');
+        
+        // User Agent
+        log('User Agent:');
+        log(navigator.userAgent, 'info');
+        log('');
+        
+        // Protocol
+        log('Protocol: ' + window.location.protocol, 
+            window.location.protocol === 'https:' ? 'success' : 'error');
+        log('Hostname: ' + window.location.hostname);
+        log('');
+        
+        // Check navigator.xr
+        log('--- Checking navigator.xr ---');
+        log('navigator.xr exists: ' + ('xr' in navigator), 
+            'xr' in navigator ? 'success' : 'error');
+        
+        if ('xr' in navigator) {
+            log('navigator.xr type: ' + typeof navigator.xr);
+            log('navigator.xr: ' + navigator.xr);
+            
+            // Check methods
+            const xrMethods = ['isSessionSupported', 'requestSession', 'supportsSession'];
+            xrMethods.forEach(method => {
+                const exists = typeof navigator.xr[method] === 'function';
+                log('  ' + method + ': ' + exists, exists ? 'success' : 'warning');
+            });
+            
+            log('');
+            log('--- Checking AR Session Support ---');
+            
+            navigator.xr.isSessionSupported('immersive-ar').then(supported => {
+                log('immersive-ar supported: ' + supported, supported ? 'success' : 'error');
+                
+                if (supported) {
+                    arButton.style.display = 'block';
+                    arButton.onclick = startAR;
+                    log('');
+                    log('✓ AR is available! Button shown.', 'success');
+                } else {
+                    log('');
+                    log('✗ AR NOT available on this device', 'error');
+                    log('');
+                    log('Possible reasons:');
+                    log('  - iOS version < 15.0');
+                    log('  - iPhone model too old');
+                    log('  - WebXR disabled in Safari settings');
+                    log('  - Device does not support ARKit');
+                }
+                
+                log('');
+                log('--- Testing Other Session Types ---');
+                
+                ['immersive-vr', 'inline'].forEach(sessionMode => {
+                    navigator.xr.isSessionSupported(sessionMode).then(supported => {
+                        log(sessionMode + ': ' + supported, supported ? 'success' : 'info');
+                    }).catch(err => {
+                        log(sessionMode + ' error: ' + err.message, 'error');
+                    });
+                });
+                
+            }).catch(error => {
+                log('Error checking AR support:', 'error');
+                log('  ' + error.name + ': ' + error.message, 'error');
+                log('  Stack: ' + error.stack, 'error');
+            });
+            
+        } else {
+            log('');
+            log('✗ navigator.xr is NOT available', 'error');
+            log('');
+            log('This means:');
+            log('  - Browser does not support WebXR');
+            log('  - You may be using Chrome on iOS (not supported)');
+            log('  - Safari version is too old');
+            log('  - Try using Safari (not Chrome) on iOS');
+            log('');
+            log('Recommendations:');
+            log('  1. Use Safari browser (not Chrome)');
+            log('  2. Update iOS to 15.0 or later');
+            log('  3. Enable WebXR in Safari settings');
+            log('     Safari → Advanced → Experimental Features');
+        }
+        
+        log('');
+        log('--- Other Capabilities ---');
+        log('geolocation: ' + ('geolocation' in navigator));
+        log('mediaDevices: ' + ('mediaDevices' in navigator));
+        log('getUserMedia: ' + ('getUserMedia' in navigator));
+        log('DeviceOrientationEvent: ' + (typeof DeviceOrientationEvent !== 'undefined'));
+        log('DeviceMotionEvent: ' + (typeof DeviceMotionEvent !== 'undefined'));
+        
+        log('');
+        log('--- Screen Info ---');
+        log('Width: ' + window.screen.width);
+        log('Height: ' + window.screen.height);
+        log('Pixel Ratio: ' + window.devicePixelRatio);
+        log('Orientation: ' + (window.screen.orientation ? window.screen.orientation.type : 'unknown'));
+        
+        log('');
+        log('=== End of Diagnostic ===');
+        
+        function startAR() {
+            log('');
+            log('--- Starting AR Session ---');
+            
+            const sessionInit = {
+                requiredFeatures: ['hit-test'],
+                optionalFeatures: ['dom-overlay'],
+                domOverlay: { root: document.body }
+            };
+            
+            log('Session config: ' + JSON.stringify(sessionInit));
+            
+            navigator.xr.requestSession('immersive-ar', sessionInit)
+                .then(session => {
+                    log('✓ AR Session started!', 'success');
+                    log('Session: ' + session);
+                    
+                    session.addEventListener('end', () => {
+                        log('AR Session ended');
+                        arButton.style.display = 'block';
+                    });
+                    
+                    arButton.style.display = 'none';
+                })
+                .catch(error => {
+                    log('✗ Error starting AR:', 'error');
+                    log('  ' + error.name + ': ' + error.message, 'error');
+                });
+        }
+        
+        testButton.onclick = () => {
+            log('');
+            log('--- Manual Re-test ---');
+            location.reload();
+        };
+    </script>
+</body>
+</html>
